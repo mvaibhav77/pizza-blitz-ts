@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  # 1. The Broker
+  redis:
+    image: redis:alpine
+    container_name: pizza-redis
+    ports:
+      - "6380:6379" # changed to 6380 to avoid host port conflict
+    networks:
+      - pizza-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # 2. The Producer (NestJS API)
+  order-api:
+    build: ./order-api
+    container_name: pizza-api
+    ports:
+      - "3000:3000"
+    environment:
+      - REDIS_HOST=redis # Matches the service name above
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - pizza-net
+
+  # 3. The Consumer (Kitchen Worker)
+  kitchen-worker:
+    build: ./kitchen-worker
+    container_name: pizza-worker
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - pizza-net
+
+# Create a custom internal network so they can talk to each other
+networks:
+  pizza-net:
+    driver: bridge

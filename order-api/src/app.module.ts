@@ -14,6 +14,12 @@ import Redis from 'ioredis';
         return new Redis({
           host: process.env.REDIS_HOST || 'localhost',
           port: 6379,
+          retryStrategy: (times) => {
+            const delay = Math.min(times * 50, 2000);
+            return delay;
+          },
+          maxRetriesPerRequest: null,
+          enableReadyCheck: false,
         });
       },
     },
