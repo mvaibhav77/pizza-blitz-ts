@@ -1,0 +1,21 @@
+{
+  "name": "pizza-blitz-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "kitchen-worker",
+    "order-api"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "build": "npm run build --workspaces",
+    "start:order-api": "npm run start:dev --workspace=order-api",
+    "start:kitchen-worker": "npm run start --workspace=kitchen-worker",
+    "simulate": "npm run simulate:order --workspace=order-api",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "devDependencies": {
+    "typescript": "^5.1.3"
+  }
+}
