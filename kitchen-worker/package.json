@@ -11,7 +11,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ioredis": "^5.9.1"
+    "@prisma/client": "^6.19.1",
+    "ioredis": "^5.9.1",
+    "prisma": "^6.19.1"
   },
   "devDependencies": {
     "@types/node": "^25.0.3",

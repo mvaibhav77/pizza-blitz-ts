@@ -1,12 +1,32 @@
 version: "3.8"
 
 services:
-  # 1. The Broker
+  # 1. The Database (New!)
+  postgres:
+    image: postgres:15-alpine
+    container_name: pizza-postgres
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: pizza_user
+      POSTGRES_PASSWORD: pizza_password
+      POSTGRES_DB: pizza_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - pizza-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pizza_user -d pizza_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. The Broker
   redis:
     image: redis:alpine
     container_name: pizza-redis
     ports:
-      - "6380:6379" # changed to 6380 to avoid host port conflict
+      - "6380:6379"
     networks:
       - pizza-net
     healthcheck:
@@ -15,35 +35,61 @@ services:
       timeout: 3s
       retries: 5
 
-  # 2. The Producer (NestJS API)
+  # 3. The Producer (API)
   order-api:
     build: ./order-api
     container_name: pizza-api
     ports:
       - "3000:3000"
     environment:
-      - REDIS_HOST=redis # Matches the service name above
+      - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # Connects to 'postgres' service on port 5432
+      - DATABASE_URL=postgresql://pizza_user:pizza_password@postgres:5432/pizza_db?schema=public
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - pizza-net
 
-  # 3. The Consumer (Kitchen Worker)
+  # 4. The Consumer (Worker)
   kitchen-worker:
-    build: ./kitchen-worker
+    build:
+      context: .
+      dockerfile: kitchen-worker/Dockerfile
     container_name: pizza-worker
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DATABASE_URL=postgresql://pizza_user:pizza_password@postgres:5432/pizza_db?schema=public
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - pizza-net
 
-# Create a custom internal network so they can talk to each other
+  # 5. Run Prisma migrations (one-off)
+  migrate:
+    build:
+      context: ./order-api
+      target: builder
+    container_name: pizza-migrate
+    command: sh -c "npx prisma migrate deploy --schema=prisma/schema.prisma"
+    environment:
+      - DATABASE_URL=postgresql://pizza_user:pizza_password@postgres:5432/pizza_db?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pizza-net
+
 networks:
   pizza-net:
     driver: bridge
+
+volumes:
+  pg_data:

@@ -1,30 +1,16 @@
-// src/worker.ts
 import Redis from "ioredis";
+import { PrismaClient } from "@prisma/client";
 
-// Connect to the same Redis instance as your API
 const redis = new Redis({
   host: process.env.REDIS_HOST || "localhost",
   port: 6379,
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
 });
 
-redis.on("connect", () => {
-  console.log("✅ Connected to Redis");
-});
+const prisma = new PrismaClient();
 
-redis.on("error", (err) => {
-  console.log("⚠️  Redis connection error (will retry):", err.message);
-});
-
-console.log("👨‍🍳 Kitchen Worker is listening for orders...");
+console.log("Kitchen Worker connecting to DB & Redis...");
 
 async function processQueue() {
-  // Infinite loop: Workers never stop!
   while (true) {
     try {
       // BLPOP = Blocking Left Pop
@@ -33,20 +19,31 @@ async function processQueue() {
       const result = await redis.blpop("pizza-queue", 0);
 
       if (result) {
-        // result[0] is the queue name ('pizza-queue')
-        // result[1] is the value ('pepperoni')
-        const pizzaType = result[1];
+        // Parse the payload
+        const job = JSON.parse(result[1]);
+        console.log("-----------------------------------------");
+        console.log(`Received Order #${job.id}: ${job.type}`);
 
-        console.log(`Cooking ${pizzaType}...`);
+        // 1. Update to PROCESSING
+        await prisma.order.update({
+          where: { id: job.id },
+          data: { status: "PROCESSING" },
+        });
 
-        // Simulate 3 seconds of heavy processing
+        console.log(`Cooking Order #${job.id}...`);
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
-        console.log(`${pizzaType} is ready!`);
+        // 2. Update to COMPLETED
+        await prisma.order.update({
+          where: { id: job.id },
+          data: { status: "COMPLETED" },
+        });
+
+        console.log(`Order #${job.id} is Ready!`);
+        console.log("_________________________________________");
       }
     } catch (err) {
-      console.error("Error processing order:", err);
-      // Wait 1 second before retrying to avoid crashing the loop
+      console.error("Error:", err);
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
