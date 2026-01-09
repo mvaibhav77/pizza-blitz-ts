@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kitchen-worker
+spec:
+  replicas: 1 # Start with 1 chef
+  selector:
+    matchLabels:
+      app: kitchen-worker
+  template:
+    metadata:
+      labels:
+        app: kitchen-worker
+    spec:
+      containers:
+        - name: kitchen-worker
+          image: pizza-worker:latest
+          imagePullPolicy: Never # Use the local Minikube image
+          env:
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: DATABASE_URL
+              # Connects to the 'postgres' service
+              value: "postgresql://pizza_user:pizza_password@postgres:5432/pizza_db?schema=public"

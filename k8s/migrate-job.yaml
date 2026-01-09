@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pizza-migration
+spec:
+  template:
+    spec:
+      containers:
+        - name: migration
+          image: pizza-api:latest
+          imagePullPolicy: Never
+          # Override the startup command to run migration instead of starting the server
+          command: ["npx", "prisma", "migrate", "deploy"]
+          env:
+            - name: DATABASE_URL
+              # Connect to the 'postgres' service we deployed earlier
+              value: "postgresql://pizza_user:pizza_password@postgres:5432/pizza_db?schema=public"
+      restartPolicy: OnFailure

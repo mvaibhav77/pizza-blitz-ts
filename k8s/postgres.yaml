@@ -1,0 +1,83 @@
+# 1. The Password Vault (Secret)
+# Kubernetes encodes this in Base64 so it's not plain text in the dashboard.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pizza-db-secret
+type: Opaque
+stringData:
+  # We use 'stringData' so we can type the password normally here.
+  # In a real company, you'd inject this from a vault, not commit it to Git.
+  password: "pizza_password"
+
+---
+# 2. The Hard Drive Request (Persistent Volume Claim)
+# "I need 1GB of storage that survives even if the Pod crashes."
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce # Only one node can mount this at a time
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# 3. The Deployment (The Manager)
+# "Keep 1 instance of Postgres running at all times."
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          # Inject Environment Variables
+          env:
+            - name: POSTGRES_USER
+              value: "pizza_user"
+            - name: POSTGRES_DB
+              value: "pizza_db"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pizza-db-secret # Read from the Secret above
+                  key: password
+          # Mount the PVC to the container's data folder
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: pg-storage
+      volumes:
+        - name: pg-storage
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+# 4. The Service (The Internal DNS)
+# "Anyone inside the cluster who asks for 'postgres' gets sent here."
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres # <--- This is the hostname the API will use!
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: postgres
+  # ClusterIP is the default. It means "Internal Only". 
+  # You can't reach this from the internet, which is good for DBs.
+  type: ClusterIP
